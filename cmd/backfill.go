@@ -2,9 +2,7 @@ package cmd
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
-	"html/template"
 	"io/ioutil"
 	"log"
 	"os"
@@ -54,20 +52,23 @@ func (c *Backfill) Run(args []string) error {
 	defer os.Remove(tmpfile.Name())
 	p := &timesheet.Punch{}
 	for scanner.Scan() {
-		if err := p.UnmarshalCLK(scanner.Bytes()); err != nil {
-			log.Println("[ERROR]", err)
-			return err
-		}
-		t, err := p.MarshalTime(time.RFC3339)
-		if err != nil {
-			log.Println("[ERROR]", err)
-			return err
-		}
-		if _, err := fmt.Fprintln(tmpfile, string(t)); err != nil {
-			log.Println("[ERROR]", err)
-			return err
+		if len(scanner.Bytes()) > 0 {
+			if err := timesheet.UnmarshalCLK(scanner.Bytes(), p); err != nil {
+				log.Println("[ERROR]", err)
+				return err
+			}
+			t, err := p.MarshalTime(time.RFC3339)
+			if err != nil {
+				log.Println("[ERROR]", err)
+				return err
+			}
+			if _, err := fmt.Fprintln(tmpfile, string(t)); err != nil {
+				log.Println("[ERROR]", err)
+				return err
+			}
 		}
 	}
+
 	if err := scanner.Err(); err != nil {
 		log.Println("[ERROR]", err)
 		return err
@@ -83,41 +84,22 @@ func (c *Backfill) Run(args []string) error {
 		log.Println("[ERROR]", err)
 		return err
 	}
-	log.Print("[DEBUG]", "tmp file: ")
-	l, _ := ioutil.ReadFile(tmpfile.Name())
-	log.Println(string(l))
 
-	// read and parse result of tmp file
-	tscanner := bufio.NewScanner(bytes.NewBuffer(l))
-	tc := timesheet.TimeCard{}
-	for tscanner.Scan() {
-		log.Println("[DEBUG]", string(tscanner.Bytes()))
-		if len(tscanner.Bytes()) < 1 {
-			continue
-		}
-		p := &timesheet.Punch{}
-		log.Println("[DEBUG]", string(tscanner.Bytes()))
-		if err := p.UnmarshalTime(tscanner.Bytes(), time.RFC3339); err != nil {
-			log.Println("[ERROR]", err)
-			return err
-		}
-		tc = append(tc, p)
-	}
-	if err := tscanner.Err(); err != nil {
+	tc, err := timesheet.ReadFile(tmpfile.Name(), timesheet.UnmarshalTime(time.RFC3339))
+	if err != nil {
 		log.Println("[ERROR]", err)
 		return err
 	}
+
 	sort.Sort(tc)
-	// replace contents of project file
-	//TODO put in tmp file intermediary so it's transactional
+
 	ff, err := os.OpenFile(project, os.O_WRONLY, 0644)
 	if err != nil {
 		log.Println("[ERROR]", err)
 		return err
 	}
 	defer ff.Close()
-	t := template.Must(template.New("timesheet").Parse(timesheet.Template))
-	if err := t.Execute(ff, tc); err != nil {
+	if err := tc.Execute(ff); err != nil {
 		log.Println("[ERROR]", err)
 		return err
 	}

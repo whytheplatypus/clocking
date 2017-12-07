@@ -5,6 +5,8 @@ import (
 	"log"
 	"os"
 	"time"
+
+	"github.com/whytheplatypus/clocking/timesheet"
 )
 
 const projdir = ".clocking"
@@ -34,20 +36,28 @@ func (c *Start) Run(args []string) error {
 	}
 
 	project := args[0]
-	// open the project file
-	// If the file doesn't exist, create it, or append to the file
-	f, err := os.OpenFile(project, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+
+	tc, err := timesheet.ReadFile(project, timesheet.UnmarshalCLK)
 	if err != nil {
 		log.Println("[ERROR]", err)
 		return err
 	}
-	defer f.Close()
 
-	if _, err := fmt.Fprintf(f, "%d:", time.Now().Unix()); err != nil {
+	tc = append(tc, &timesheet.Punch{
+		Start: time.Now().Unix(),
+	})
+
+	ff, err := os.OpenFile(project, os.O_WRONLY, 0644)
+	if err != nil {
 		log.Println("[ERROR]", err)
 		return err
 	}
-	// make a new entry
-	// error if there's already an active entry
+	defer ff.Close()
+
+	if err := tc.Execute(ff); err != nil {
+		log.Println("[ERROR]", err)
+		return err
+	}
+
 	return nil
 }

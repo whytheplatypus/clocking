@@ -1,19 +1,67 @@
 package timesheet
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
 	"strconv"
+	"text/template"
 	"time"
 )
+
+var t *template.Template
+
+func init() {
+	t = template.Must(template.New("timesheet").Parse(Template))
+}
 
 type TimeCard []*Punch
 
 func (a TimeCard) Len() int           { return len(a) }
 func (a TimeCard) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a TimeCard) Less(i, j int) bool { return a[i].Start < a[j].Start }
+
+func (tc TimeCard) Execute(w io.Writer) error {
+	return t.Execute(w, tc)
+}
+
+type Parser func([]byte, *Punch) error
+
+func ReadFile(f string, prsr Parser) (TimeCard, error) {
+	tc := TimeCard{}
+	log.Print("[DEBUG]", "tmp file: ")
+	l, err := ioutil.ReadFile(f)
+	if err != nil {
+		log.Println("[ERROR]", err)
+		return tc, err
+	}
+	log.Println(string(l))
+
+	// read and parse result of tmp file
+	tscanner := bufio.NewScanner(bytes.NewBuffer(l))
+	for tscanner.Scan() {
+		log.Println("[DEBUG]", string(tscanner.Bytes()))
+		if len(tscanner.Bytes()) < 1 {
+			continue
+		}
+		p := &Punch{}
+		log.Println("[DEBUG]", string(tscanner.Bytes()))
+		if err := prsr(tscanner.Bytes(), p); err != nil {
+			log.Println("[ERROR]", err)
+			return tc, err
+		}
+		tc = append(tc, p)
+	}
+	if err := tscanner.Err(); err != nil {
+		log.Println("[ERROR]", err)
+		return tc, err
+	}
+	return tc, nil
+}
 
 type Punch struct {
 	Start int64
@@ -23,7 +71,7 @@ type Punch struct {
 
 var ErrBadFmt = errors.New("There was a problem with the record time format")
 
-func (p *Punch) UnmarshalCLK(in []byte) error {
+func UnmarshalCLK(in []byte, p *Punch) error {
 	log.Println("[DEBUG]", string(in))
 	times := bytes.SplitN(in, []byte{':'}, 2)
 	start := times[0]
@@ -61,22 +109,24 @@ func (p *Punch) MarshalText() ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-func (p *Punch) UnmarshalTime(in []byte, layout string) error {
-	parts := bytes.Split(in, []byte{'|'})
-	start, err := time.Parse(layout, string(bytes.TrimSpace(parts[0])))
-	if err != nil {
-		log.Println("[ERROR]", err)
-		return err
+func UnmarshalTime(layout string) Parser {
+	return func(in []byte, p *Punch) error {
+		parts := bytes.Split(in, []byte{'|'})
+		start, err := time.Parse(layout, string(bytes.TrimSpace(parts[0])))
+		if err != nil {
+			log.Println("[ERROR]", err)
+			return err
+		}
+		stop, err := time.Parse(layout, string(bytes.TrimSpace(parts[1])))
+		if err != nil {
+			log.Println("[ERROR]", err)
+			return err
+		}
+		p.Start = start.Unix()
+		p.End = stop.Unix()
+		p.Msg = string(bytes.TrimSpace(parts[2]))
+		return nil
 	}
-	stop, err := time.Parse(layout, string(bytes.TrimSpace(parts[1])))
-	if err != nil {
-		log.Println("[ERROR]", err)
-		return err
-	}
-	p.Start = start.Unix()
-	p.End = stop.Unix()
-	p.Msg = string(bytes.TrimSpace(parts[2]))
-	return nil
 }
 
 func (p *Punch) MarshalTime(layout string) ([]byte, error) {

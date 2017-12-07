@@ -44,11 +44,13 @@ func (c *Calculate) Run(args []string) error {
 	p := &timesheet.Punch{}
 	t := time.Duration(0)
 	for scanner.Scan() {
-		if err := p.UnmarshalCLK(scanner.Bytes()); err != nil {
-			log.Println("[ERROR]", err)
-			return err
+		if len(scanner.Bytes()) > 0 {
+			if err := timesheet.UnmarshalCLK(scanner.Bytes(), p); err != nil {
+				log.Println("[ERROR]", err)
+				return err
+			}
+			t += time.Unix(p.End, 0).Sub(time.Unix(p.Start, 0))
 		}
-		t += time.Unix(p.End, 0).Sub(time.Unix(p.Start, 0))
 	}
 	if err := scanner.Err(); err != nil {
 		log.Println("[ERROR]", err)

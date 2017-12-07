@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"time"
+
+	"github.com/whytheplatypus/clocking/timesheet"
 )
 
 type Stop struct{}
@@ -34,19 +36,6 @@ func (c *Stop) Run(args []string) error {
 	}
 
 	project := args[0]
-	// open the project file
-	// If the file doesn't exist, create it, or append to the file
-	f, err := os.OpenFile(project, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Println("[ERROR]", err)
-		return err
-	}
-	defer f.Close()
-
-	if _, err := fmt.Fprintf(f, "%d ", time.Now().Unix()); err != nil {
-		log.Println("[ERROR]", err)
-		return err
-	}
 
 	//TODO default
 	tmpfile, err := ioutil.TempFile("", "clocking")
@@ -72,10 +61,27 @@ func (c *Stop) Run(args []string) error {
 		return err
 	}
 
-	if _, err := fmt.Fprintf(f, "%q", msg); err != nil {
+	tc, err := timesheet.ReadFile(project, timesheet.UnmarshalCLK)
+	if err != nil {
 		log.Println("[ERROR]", err)
 		return err
 	}
+
+	tc[len(tc)-1].End = time.Now().Unix()
+	tc[len(tc)-1].Msg = string(msg)
+
+	ff, err := os.OpenFile(project, os.O_WRONLY, 0644)
+	if err != nil {
+		log.Println("[ERROR]", err)
+		return err
+	}
+	defer ff.Close()
+
+	if err := tc.Execute(ff); err != nil {
+		log.Println("[ERROR]", err)
+		return err
+	}
+
 	if err := save(string(msg)); err != nil {
 		log.Println("[DEBUG]", err)
 	}
