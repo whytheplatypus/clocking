@@ -35,6 +35,9 @@ func main() {
 	subcmds.Register(
 		"calculate",
 		&cmd.Calculate{})
+	subcmds.Register(
+		"summary",
+		&cmd.Summary{})
 
 	var verbose bool
 	cmdFlag := flag.NewFlagSet(os.Args[0], flag.ContinueOnError)

@@ -49,7 +49,7 @@ func (c *Calculate) Run(args []string) error {
 				log.Println("[ERROR]", err)
 				return err
 			}
-			t += time.Unix(p.End, 0).Sub(time.Unix(p.Start, 0))
+			t += time.Unix(p.End, 0).Sub(time.Unix(p.Start, 0)).Round(time.Duration(time.Hour / 4))
 		}
 	}
 	if err := scanner.Err(); err != nil {
