@@ -32,9 +32,11 @@ func main() {
 	subcmds.Register(
 		"backfill",
 		&cmd.Backfill{})
+	// should be calculate <day, week, month>
 	subcmds.Register(
 		"calculate",
 		&cmd.Calculate{})
+	// should be summary <day, week, month>
 	subcmds.Register(
 		"summary",
 		&cmd.Summary{})
